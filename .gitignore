@@ -1,6 +1,2 @@
-.precomp/
-**/.precomp/
-./precomp/
-./codex
 .codex/
-./.codex/
+.precomp/
