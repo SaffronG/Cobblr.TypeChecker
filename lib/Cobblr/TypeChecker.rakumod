@@ -10,7 +10,9 @@ class TypeEnv {
     has @.scopes;  # stack of Hashes
 
     method new-env() {
-        self.new(scopes => [ {} ])
+        my $env = self.new;
+        $env.push;
+        $env
     }
 
     method push() {
@@ -57,9 +59,9 @@ class TypeChecker {
     has TypeEnv $.tenv;
     has FunctionEnv $.fenv;
 
-    submethod new() {
-        self.bless(tenv => TypeEnv.new-env(); fenv => FunctionEnv.new)
-    }    
+    method new() {
+        self.bless(tenv => TypeEnv.new-env, fenv => FunctionEnv.new)
+    }
 
     method check(Cobblr::AST::Program $program) {
         self.visit-Program($program)
