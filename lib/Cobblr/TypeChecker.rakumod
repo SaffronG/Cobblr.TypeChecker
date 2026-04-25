@@ -111,11 +111,10 @@ class TypeChecker {
     # -----------------------------
     method visit-Function(Cobblr::AST::Function $f) {
         my @param-types;
+        my @params = $f.param-groups.flat;
 
-        for $f.param-groups.flat -> @group {
-            for @group -> $param {
-                @param-types.push($param.ty // 'Unknown')
-            }
+        for @params -> $param {
+            @param-types.push($param.ty // 'Unknown')
         }
 
         $.fenv.add($f.name, @param-types, $f.ret);
@@ -123,7 +122,7 @@ class TypeChecker {
         $.tenv.push;
 
         # bind params
-        for $f.param-groups.flat -> $param {
+        for @params -> $param {
             $.tenv.declare($param.name, $param.ty)
         }
 
@@ -298,5 +297,56 @@ class TypeChecker {
             when Cobblr::AST::Float32 { Cobblr::AST::TFloat32 }
             default { Cobblr::AST::TInt64 }
         }
+    }
+
+    method format-equation($expr, $type, Bool :$passes = True, Str :$context = "Γ") {
+        my $turnstile = $passes ?? "⊢" !! "⊬";
+        my $type-text = $type.defined ?? $type.gist !! "τ";
+        my $expr-text = self.format-nested-gist($expr.gist);
+        "$context $turnstile $expr-text : $type-text"
+    }
+
+    method format-nested-gist(Str:D $text) {
+        my $out = "";
+        my $depth = 0;
+        my $in-string = False;
+        my $escaped = False;
+
+        for $text.comb -> $ch {
+            if $in-string {
+                $out ~= $ch;
+                if $escaped {
+                    $escaped = False;
+                } elsif $ch eq "\\" {
+                    $escaped = True;
+                } elsif $ch eq '"' {
+                    $in-string = False;
+                }
+                next;
+            }
+
+            given $ch {
+                when '"' {
+                    $in-string = True;
+                    $out ~= $ch;
+                }
+                when '(' {
+                    $depth++;
+                    $out ~= "(\n" ~ ("  " x $depth);
+                }
+                when ',' {
+                    $out ~= ",\n" ~ ("  " x $depth);
+                }
+                when ')' {
+                    $depth-- if $depth > 0;
+                    $out ~= "\n" ~ ("  " x $depth) ~ ")";
+                }
+                default {
+                    $out ~= $ch;
+                }
+            }
+        }
+
+        $out
     }
 }

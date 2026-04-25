@@ -3,6 +3,36 @@ use lib 'lib';
 use Cobblr::AST;
 use Cobblr::TypeChecker;
 
+my constant ANSI-RESET  = "\e[0m";
+my constant ANSI-RED    = "\e[31m";
+my constant ANSI-GREEN  = "\e[32m";
+my constant ANSI-YELLOW = "\e[33m";
+my constant ANSI-BLUE   = "\e[34m";
+
+sub color(Str:D $text, Str:D $ansi) {
+    $ansi ~ $text ~ ANSI-RESET
+}
+
+sub pretty-equation(Str:D $equation) {
+    my ($left, $right) = $equation.split(":", 2);
+    my $colored-left = $left.subst(/<[A..Za..z_]> <[A..Za..z0..9_\-]>* /, -> $/ {
+        my $token = ~$/;
+        $token eq "PASS" || $token eq "FAIL" ?? $token !! color($token, ANSI-YELLOW)
+    }, :g);
+    my $colored-right = $right.defined ?? color($right.trim, ANSI-BLUE) !! color("τ", ANSI-BLUE);
+    "$colored-left : $colored-right"
+}
+
+sub print-judgment(Str:D $status, Str:D $equation) {
+    my $status-color = $status eq "PASS" ?? ANSI-GREEN !! ANSI-RED;
+    say color($status, $status-color) ~ "  " ~ pretty-equation($equation);
+}
+
+my $passing-expr = Cobblr::AST::Add.new(
+    l => Cobblr::AST::Identifier.new(name => "x"),
+    r => Cobblr::AST::Identifier.new(name => "y")
+);
+
 my $passing-ast = Cobblr::AST::Program.new(
     decls => [
         Cobblr::AST::Let.new(
@@ -22,12 +52,14 @@ my $passing-ast = Cobblr::AST::Program.new(
         Cobblr::AST::Let.new(
             name  => "z",
             type  => Nil,
-            value => Cobblr::AST::Add.new(
-                l => Cobblr::AST::Identifier.new(name => "x"),
-                r => Cobblr::AST::Identifier.new(name => "y")
-            )
+            value => $passing-expr
         )
     ]
+);
+
+my $failing-expr = Cobblr::AST::Add.new(
+    l => Cobblr::AST::Identifier.new(name => "x"),
+    r => Cobblr::AST::StringLit.new(value => "oops")
 );
 
 my $failing-ast = Cobblr::AST::Program.new(
@@ -42,26 +74,71 @@ my $failing-ast = Cobblr::AST::Program.new(
         Cobblr::AST::Let.new(
             name  => "bad",
             type  => Nil,
-            value => Cobblr::AST::Add.new(
-                l => Cobblr::AST::Identifier.new(name => "x"),
-                r => Cobblr::AST::StringLit.new(value => "oops")
-            )
+            value => $failing-expr
         )
     ]
 );
 
-say "\t<<KEY>> \nΓ = Context\n⊢ = asserts that \n⊬ = asserts that is not\n: = has type of <type>\n";
+my $fn-call-expr = Cobblr::AST::Call.new(
+    func => Cobblr::AST::Identifier.new(name => "sum2"),
+    args => [
+        Cobblr::AST::NumberLit.new(value => Cobblr::AST::Int64.new(value => 4)),
+        Cobblr::AST::NumberLit.new(value => Cobblr::AST::Int64.new(value => 6))
+    ]
+);
+
+my $function-ast = Cobblr::AST::Program.new(
+    decls => [
+        Cobblr::AST::Function.new(
+            name => "sum2",
+            param-groups => [[
+                Cobblr::AST::Param.new(name => "a", ty => Cobblr::AST::TInt64, is-mut => False),
+                Cobblr::AST::Param.new(name => "b", ty => Cobblr::AST::TInt64, is-mut => False)
+            ]],
+            ret => Cobblr::AST::TInt64,
+            body => Cobblr::AST::Block.new(
+                statements => [],
+                implicit-return => Cobblr::AST::Add.new(
+                    l => Cobblr::AST::Identifier.new(name => "a"),
+                    r => Cobblr::AST::Identifier.new(name => "b")
+                )
+            )
+        ),
+        Cobblr::AST::Let.new(
+            name => "fn-result",
+            type => Nil,
+            value => $fn-call-expr
+        )
+    ]
+);
+
+say "<<KEY>>";
+say "Γ = Context";
+say "⊢ = asserts that";
+say "⊬ = asserts that is not";
+say ": = has type of <type>";
+say "";
 my $passing-checker = Cobblr::TypeChecker::TypeChecker.new;
 $passing-checker.check($passing-ast);
-say "PASS  Γ ⊢ x + y : TInt64";
+my $passing-type = $passing-checker.infer($passing-expr);
+print-judgment("PASS", $passing-checker.format-equation($passing-expr, $passing-type));
+say "";
+
+my $function-checker = Cobblr::TypeChecker::TypeChecker.new;
+$function-checker.check($function-ast);
+my $fn-call-type = $function-checker.infer($fn-call-expr);
+print-judgment("PASS", $function-checker.format-equation($fn-call-expr, $fn-call-type));
+say "";
 
 my $failing-checker = Cobblr::TypeChecker::TypeChecker.new;
 try {
     $failing-checker.check($failing-ast);
-    say "FAIL  Γ ⊢ x + \"oops\" : TInt64   (unexpected)";
+    my $failing-type = $failing-checker.infer($failing-expr);
+    print-judgment("FAIL", $failing-checker.format-equation($failing-expr, $failing-type) ~ "   (unexpected)");
     CATCH {
         default {
-            say "PASS  Γ ⊬ x + \"oops\" : τ    ({.message})";
+            print-judgment("PASS", $failing-checker.format-equation($failing-expr, Nil, :passes(False)));
+            say "      " ~ color(.message, ANSI-RED);
         }
     }
 }
