@@ -2,10 +2,6 @@ unit module Cobblr::TypeChecker;
 
 use Cobblr::AST;
 
-# -----------------------------
-# TYPE ENVIRONMENT
-# -----------------------------
-
 class TypeEnv {
     has @.scopes;  # stack of Hashes
 
@@ -35,10 +31,6 @@ class TypeEnv {
     }
 }
 
-# -----------------------------
-# FUNCTION SIGNATURE ENV
-# -----------------------------
-
 class FunctionEnv {
     has %!fns;
 
@@ -50,10 +42,6 @@ class FunctionEnv {
         %!fns{$name} // die "Undefined function: $name"
     }
 }
-
-# -----------------------------
-# MAIN TYPE CHECKER
-# -----------------------------
 
 class TypeChecker {
     has TypeEnv $.tenv;
@@ -67,18 +55,11 @@ class TypeChecker {
         self.visit-Program($program)
     }
 
-    # -----------------------------
-    # PROGRAM
-    # -----------------------------
     method visit-Program(Cobblr::AST::Program $p) {
         for $p.decls -> $decl {
             self.visit($decl)
         }
     }
-
-    # -----------------------------
-    # DECLS
-    # -----------------------------
 
     method visit($node) {
         given $node.WHAT {
@@ -106,9 +87,6 @@ class TypeChecker {
         }
     }
 
-    # -----------------------------
-    # FUNCTION
-    # -----------------------------
     method visit-Function(Cobblr::AST::Function $f) {
         my @param-types;
         my @params = $f.param-groups.flat;
@@ -131,9 +109,6 @@ class TypeChecker {
         $.tenv.pop;
     }
 
-    # -----------------------------
-    # LET
-    # -----------------------------
     method visit-Let(Cobblr::AST::Let $l) {
         my $t = self.infer($l.value);
         $.tenv.declare($l.name, $t)
@@ -144,9 +119,6 @@ class TypeChecker {
         $.tenv.declare($l.name, $t)
     }
 
-    # -----------------------------
-    # BLOCK
-    # -----------------------------
     method visit-Block(Cobblr::AST::Block $b) {
         $.tenv.push;
 
@@ -186,10 +158,6 @@ class TypeChecker {
             }
         }
     }
-
-    # -----------------------------
-    # EXPRESSIONS
-    # -----------------------------
 
     method infer($e) {
         given $e.WHAT {
@@ -262,10 +230,6 @@ class TypeChecker {
             }
         }
     }
-
-    # -----------------------------
-    # HELPERS
-    # -----------------------------
 
     method infer-binary-number($e) {
         my $l = self.infer($e.l);
